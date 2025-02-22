@@ -853,7 +853,7 @@ int sign_item_cmp(const void *p1, const void *p2)
 static const uint32_t sign_filter[4] = {[kMTMetaSignText] = kMTFilterSelect,
                                         [kMTMetaSignHL] = kMTFilterSelect };
 
-/// Return the sign attributes on the currently refreshed row.
+/// Return the signs and highest priority sign attributes on a row.
 ///
 /// @param[out] sattrs Output array for sign text and texthl id
 /// @param[out] line_id Highest priority linehl id
@@ -904,17 +904,17 @@ void decor_redraw_signs(win_T *wp, buf_T *buf, int row, SignTextAttrs sattrs[], 
 
     for (size_t i = 0; i < kv_size(signs); i++) {
       DecorSignHighlight *sh = kv_A(signs, i).sh;
-      if (idx < len && sh->text[0]) {
+      if (sattrs && idx < len && sh->text[0]) {
         memcpy(sattrs[idx].text, sh->text, SIGN_WIDTH * sizeof(sattr_T));
         sattrs[idx++].hl_id = sh->hl_id;
       }
-      if (*num_id == 0) {
+      if (num_id != NULL && *num_id <= 0) {
         *num_id = sh->number_hl_id;
       }
-      if (*line_id == 0) {
+      if (line_id != NULL && *line_id <= 0) {
         *line_id = sh->line_hl_id;
       }
-      if (*cul_id == 0) {
+      if (cul_id != NULL && *cul_id <= 0) {
         *cul_id = sh->cursorline_hl_id;
       }
     }
@@ -1038,7 +1038,8 @@ bool decor_redraw_eol(win_T *wp, DecorState *state, int *eol_attr, int eol_col)
 static const uint32_t lines_filter[4] = {[kMTMetaLines] = kMTFilterSelect };
 
 /// @param apply_folds Only count virtual lines that are not in folds.
-int decor_virt_lines(win_T *wp, int start_row, int end_row, VirtLines *lines, bool apply_folds)
+int decor_virt_lines(win_T *wp, int start_row, int end_row, int *num_below, VirtLines *lines,
+                     bool apply_folds)
 {
   buf_T *buf = wp->w_buffer;
   if (!buf_meta_total(buf, kMTMetaLines)) {
@@ -1070,6 +1071,9 @@ int decor_virt_lines(win_T *wp, int start_row, int end_row, VirtLines *lines, bo
             virt_lines += (int)kv_size(vt->data.virt_lines);
             if (lines) {
               kv_splice(*lines, vt->data.virt_lines);
+            }
+            if (num_below && !above) {
+              (*num_below) += (int)kv_size(vt->data.virt_lines);
             }
           }
         }
@@ -1165,15 +1169,17 @@ void decor_to_dict_legacy(Dict *dict, DecorInline decor, bool hl_name, Arena *ar
 
   if (virt_lines) {
     Array all_chunks = arena_array(arena, kv_size(virt_lines->data.virt_lines));
-    bool virt_lines_leftcol = false;
+    int virt_lines_flags = 0;
     for (size_t i = 0; i < kv_size(virt_lines->data.virt_lines); i++) {
-      virt_lines_leftcol = kv_A(virt_lines->data.virt_lines, i).left_col;
+      virt_lines_flags = kv_A(virt_lines->data.virt_lines, i).flags;
       Array chunks = virt_text_to_array(kv_A(virt_lines->data.virt_lines, i).line, hl_name, arena);
       ADD(all_chunks, ARRAY_OBJ(chunks));
     }
     PUT_C(*dict, "virt_lines", ARRAY_OBJ(all_chunks));
     PUT_C(*dict, "virt_lines_above", BOOLEAN_OBJ(virt_lines->flags & kVTLinesAbove));
-    PUT_C(*dict, "virt_lines_leftcol", BOOLEAN_OBJ(virt_lines_leftcol));
+    PUT_C(*dict, "virt_lines_leftcol", BOOLEAN_OBJ(virt_lines_flags & kVLLeftcol));
+    PUT_C(*dict, "virt_lines_overflow",
+          CSTR_AS_OBJ(virt_lines_flags & kVLScroll ? "scroll" : "trunc"));
     priority = virt_lines->priority;
   }
 
