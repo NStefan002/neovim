@@ -5530,31 +5530,20 @@ static dict_T *make_win_info_dict(int width, int height, int topline, int topfil
   return NULL;
 }
 
-/// Return values of check_window_scroll_resize():
-enum {
-  CWSR_SCROLLED = 1,  ///< at least one window scrolled
-  CWSR_RESIZED  = 2,  ///< at least one window size changed
-};
-
 /// This function is used for three purposes:
-/// 1. Goes over all windows in the current tab page and returns:
-///      0                               no scrolling and no size changes found
-///      CWSR_SCROLLED                   at least one window scrolled
-///      CWSR_RESIZED                    at least one window changed size
-///      CWSR_SCROLLED + CWSR_RESIZED    both
-///    "size_count" is set to the nr of windows with size changes.
-///    "first_scroll_win" is set to the first window with any relevant changes.
-///    "first_size_win" is set to the first window with size changes.
+/// 1. Goes over all windows in the current tab page and sets:
+///    "size_count" to the nr of windows with size changes.
+///    "first_scroll_win" to the first window with any relevant changes.
+///    "first_size_win" to the first window with size changes.
 ///
 /// 2. When the first three arguments are NULL and "winlist" is not NULL,
 ///    "winlist" is set to the list of window IDs with size changes.
 ///
 /// 3. When the first three arguments are NULL and "v_event" is not NULL,
 ///    information about changed windows is added to "v_event".
-static int check_window_scroll_resize(int *size_count, win_T **first_scroll_win,
-                                      win_T **first_size_win, list_T *winlist, dict_T *v_event)
+static void check_window_scroll_resize(int *size_count, win_T **first_scroll_win,
+                                       win_T **first_size_win, list_T *winlist, dict_T *v_event)
 {
-  int result = 0;
   // int listidx = 0;
   int tot_width = 0;
   int tot_height = 0;
@@ -5576,10 +5565,11 @@ static int check_window_scroll_resize(int *size_count, win_T **first_scroll_win,
       continue;
     }
 
-    const bool size_changed = wp->w_last_width != wp->w_width
-                              || wp->w_last_height != wp->w_height;
+    const bool ignore_scroll = event_ignored(EVENT_WINSCROLLED, wp->w_p_eiw);
+    const bool size_changed = !event_ignored(EVENT_WINRESIZED, wp->w_p_eiw)
+                              && (wp->w_last_width != wp->w_width
+                                  || wp->w_last_height != wp->w_height);
     if (size_changed) {
-      result |= CWSR_RESIZED;
       if (winlist != NULL) {
         // Add this window to the list of changed windows.
         typval_T tv = {
@@ -5597,21 +5587,19 @@ static int check_window_scroll_resize(int *size_count, win_T **first_scroll_win,
         }
         // For WinScrolled the first window with a size change is used
         // even when it didn't scroll.
-        if (*first_scroll_win == NULL) {
+        if (*first_scroll_win == NULL && !ignore_scroll) {
           *first_scroll_win = wp;
         }
       }
     }
 
-    const bool scroll_changed = wp->w_last_topline != wp->w_topline
-                                || wp->w_last_topfill != wp->w_topfill
-                                || wp->w_last_leftcol != wp->w_leftcol
-                                || wp->w_last_skipcol != wp->w_skipcol;
-    if (scroll_changed) {
-      result |= CWSR_SCROLLED;
-      if (first_scroll_win != NULL && *first_scroll_win == NULL) {
-        *first_scroll_win = wp;
-      }
+    const bool scroll_changed = !ignore_scroll
+                                && (wp->w_last_topline != wp->w_topline
+                                    || wp->w_last_topfill != wp->w_topfill
+                                    || wp->w_last_leftcol != wp->w_leftcol
+                                    || wp->w_last_skipcol != wp->w_skipcol);
+    if (scroll_changed && first_scroll_win != NULL && *first_scroll_win == NULL) {
+      *first_scroll_win = wp;
     }
 
     if ((size_changed || scroll_changed) && v_event != NULL) {
@@ -5655,8 +5643,6 @@ static int check_window_scroll_resize(int *size_count, win_T **first_scroll_win,
       }
     }
   }
-
-  return result;
 }
 
 /// Trigger WinScrolled and/or WinResized if any window in the current tab page
@@ -5676,11 +5662,9 @@ void may_trigger_win_scrolled_resized(void)
   int size_count = 0;
   win_T *first_scroll_win = NULL;
   win_T *first_size_win = NULL;
-  int cwsr = check_window_scroll_resize(&size_count,
-                                        &first_scroll_win, &first_size_win,
-                                        NULL, NULL);
+  check_window_scroll_resize(&size_count, &first_scroll_win, &first_size_win, NULL, NULL);
   bool trigger_resize = do_resize && size_count > 0;
-  bool trigger_scroll = do_scroll && cwsr != 0;
+  bool trigger_scroll = do_scroll && first_scroll_win != NULL;
   if (!trigger_resize && !trigger_scroll) {
     return;  // no relevant changes
   }
@@ -6452,9 +6436,9 @@ void win_fix_scroll(bool resize)
 
         // Add difference in height and row to botline.
         if (diff > 0) {
-          cursor_down_inner(wp, diff);
+          cursor_down_inner(wp, diff, false);
         } else {
-          cursor_up_inner(wp, -diff);
+          cursor_up_inner(wp, -diff, false);
         }
 
         // Scroll to put the new cursor position at the bottom of the
@@ -6501,11 +6485,11 @@ static void win_fix_cursor(bool normal)
   linenr_T lnum = wp->w_cursor.lnum;
 
   wp->w_cursor.lnum = wp->w_topline;
-  cursor_down_inner(wp, so);
+  cursor_down_inner(wp, so, false);
   linenr_T top = wp->w_cursor.lnum;
 
   wp->w_cursor.lnum = wp->w_botline - 1;
-  cursor_up_inner(wp, so);
+  cursor_up_inner(wp, so, false);
   linenr_T bot = wp->w_cursor.lnum;
 
   wp->w_cursor.lnum = lnum;
@@ -6599,7 +6583,7 @@ void scroll_to_fraction(win_T *wp, int prev_height)
         hasFolding(wp, lnum, &lnum, NULL);
         if (lnum == 1) {
           // first line in buffer is folded
-          line_size = 1;
+          line_size = !decor_conceal_line(wp, lnum - 1, false);
           sline--;
           break;
         }
@@ -6730,8 +6714,8 @@ void win_comp_scroll(win_T *wp)
 
   if (wp->w_p_scr != old_w_p_scr) {
     // Used by "verbose set scroll".
-    wp->w_p_script_ctx[kWinOptScroll].script_ctx.sc_sid = SID_WINLAYOUT;
-    wp->w_p_script_ctx[kWinOptScroll].script_ctx.sc_lnum = 0;
+    wp->w_p_script_ctx[kWinOptScroll].sc_sid = SID_WINLAYOUT;
+    wp->w_p_script_ctx[kWinOptScroll].sc_lnum = 0;
   }
 }
 

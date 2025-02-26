@@ -638,10 +638,14 @@ function vim.api.nvim_buf_line_count(buffer) end
 ---     placed below the buffer line containing the mark.
 ---
 --- - virt_lines_above: place virtual lines above instead.
---- - virt_lines_leftcol: Place extmarks in the leftmost
+--- - virt_lines_leftcol: Place virtual lines in the leftmost
 ---                       column of the window, bypassing
 ---                       sign and number columns.
----
+--- - virt_lines_overflow: controls how to handle virtual lines wider
+---     than the window. Currently takes the one of the following values:
+---   - "trunc": truncate virtual lines on the right (default).
+---   - "scroll": virtual lines can scroll horizontally with 'nowrap',
+---      otherwise the same as "trunc".
 --- - ephemeral : for use with `nvim_set_decoration_provider()`
 ---     callbacks. The mark will only be used for the current
 ---     redraw cycle, and not be permantently stored in the
@@ -681,6 +685,10 @@ function vim.api.nvim_buf_line_count(buffer) end
 ---     When a character is supplied it is used as `:syn-cchar`.
 ---     "hl_group" is used as highlight for the cchar if provided,
 ---     otherwise it defaults to `hl-Conceal`.
+--- - conceal_lines: string which should be empty. When
+---     provided, lines in the range are not drawn at all
+---     (according to 'conceallevel'); the next unconcealed line
+---     is drawn instead.
 --- - spell: boolean indicating that spell checking should be
 ---     performed within this extmark
 --- - ui_watched: boolean that indicates the mark should be drawn

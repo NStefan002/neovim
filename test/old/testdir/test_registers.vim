@@ -435,6 +435,23 @@ func Test_set_register()
   enew!
 endfunc
 
+" Test for blockwise register width calculations
+func Test_set_register_blockwise_width()
+  " Test for regular calculations and overriding the width
+  call setreg('a', "12\n1234\n123", 'b')
+  call assert_equal("\<c-v>4", getreginfo('a').regtype)
+  call setreg('a', "12\n1234\n123", 'b1')
+  call assert_equal("\<c-v>1", getreginfo('a').regtype)
+  call setreg('a', "12\n1234\n123", 'b6')
+  call assert_equal("\<c-v>6", getreginfo('a').regtype)
+
+  " Test for Unicode parsing
+  call setreg('a', "z😅😅z\n12345", 'b')
+  call assert_equal("\<c-v>6", getreginfo('a').regtype)
+  call setreg('a', ["z😅😅z", "12345"], 'b')
+  call assert_equal("\<c-v>6", getreginfo('a').regtype)
+endfunc
+
 " Test for clipboard registers (* and +)
 func Test_clipboard_regs()
   throw 'skipped: needs clipboard=autoselect,autoselectplus'
@@ -987,6 +1004,23 @@ func Test_insert_small_delete_replace_mode()
   exe ":norm! R\<C-R>-"
   call assert_equal(['ZZZ', 'foofoo', '',  'βbβobarZZZZ'], getline(1, 4))
   bwipe!
+endfunc
+
+" this caused an illegal memory access and a crash
+func Test_register_cursor_column_negative()
+  CheckRunVimInTerminal
+  let script =<< trim END
+    f XREGISTER
+    call setline(1, 'abcdef a')
+    call setreg("a", "\n", 'c')
+    call cursor(1, 7)
+    call feedkeys("i\<C-R>\<C-P>azyx$#\<esc>", 't')
+  END
+  call writefile(script, 'XRegister123', 'D')
+  let buf = RunVimInTerminal('-S XRegister123', {})
+  call term_sendkeys(buf, "\<c-g>")
+  call WaitForAssert({-> assert_match('XREGISTER', term_getline(buf, 19))})
+  call StopVimInTerminal(buf)
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

@@ -254,6 +254,7 @@ static pos_T compl_startpos;
 /// Length in bytes of the text being completed (this is deleted to be replaced
 /// by the match.)
 static int compl_length = 0;
+static linenr_T compl_lnum = 0;         ///< lnum where the completion start
 static colnr_T compl_col = 0;           ///< column where the text starts
                                         ///< that is being completed
 static colnr_T compl_ins_end_col = 0;
@@ -580,7 +581,8 @@ static void do_autocmd_completedone(int c, int mode, char *word)
   tv_dict_add_str(v_event, S_LEN("complete_word"), word != NULL ? word : "");
   tv_dict_add_str(v_event, S_LEN("complete_type"), mode_str != NULL ? mode_str : "");
 
-  tv_dict_add_str(v_event, S_LEN("reason"), (c == Ctrl_Y ? "accept" : "cancel"));
+  tv_dict_add_str(v_event, S_LEN("reason"),
+                  (c == Ctrl_Y ? "accept" : (c == Ctrl_E ? "cancel" : "discard")));
   tv_dict_set_keys_readonly(v_event);
 
   ins_apply_autocmds(EVENT_COMPLETEDONE);
@@ -858,10 +860,7 @@ static int ins_compl_add(char *const str, int len, char *const fname, char *cons
   // Allocate a new match structure.
   // Copy the values to the new match structure.
   match = xcalloc(1, sizeof(compl_T));
-  match->cp_number = -1;
-  if (flags & CP_ORIGINAL_TEXT) {
-    match->cp_number = 0;
-  }
+  match->cp_number = flags & CP_ORIGINAL_TEXT ? 0 : -1;
   match->cp_str = cbuf_to_string(str, (size_t)len);
 
   // match-fname is:
@@ -963,18 +962,45 @@ static void ins_compl_insert_bytes(char *p, int len)
 
 /// Checks if the column is within the currently inserted completion text
 /// column range. If it is, it returns a special highlight attribute.
-/// -1 mean normal item.
-int ins_compl_col_range_attr(int col)
+/// -1 means normal item.
+int ins_compl_col_range_attr(linenr_T lnum, int col)
 {
-  if (get_cot_flags() & kOptCotFlagFuzzy) {
+  int attr;
+  if ((get_cot_flags() & kOptCotFlagFuzzy) || (attr = syn_name2attr("ComplMatchIns")) == 0) {
     return -1;
   }
 
-  if (col >= (compl_col + (int)ins_compl_leader_len()) && col < compl_ins_end_col) {
-    return syn_name2attr("ComplMatchIns");
+  int start_col = compl_col + (int)ins_compl_leader_len();
+  if (!ins_compl_has_multiple()) {
+    return (col >= start_col && col < compl_ins_end_col) ? attr : -1;
+  }
+
+  // Multiple lines
+  if ((lnum == compl_lnum && col >= start_col && col < MAXCOL)
+      || (lnum > compl_lnum && lnum < curwin->w_cursor.lnum)
+      || (lnum == curwin->w_cursor.lnum && col <= compl_ins_end_col)) {
+    return attr;
   }
 
   return -1;
+}
+
+/// Returns true if the current completion string contains newline characters,
+/// indicating it's a multi-line completion.
+static bool ins_compl_has_multiple(void)
+{
+  return vim_strchr(compl_shown_match->cp_str.data, '\n') != NULL;
+}
+
+/// Returns true if the given line number falls within the range of a multi-line
+/// completion, i.e. between the starting line (compl_lnum) and current cursor
+/// line. Always returns false for single-line completions.
+bool ins_compl_lnum_in_range(linenr_T lnum)
+{
+  if (!ins_compl_has_multiple()) {
+    return false;
+  }
+  return lnum >= compl_lnum && lnum <= curwin->w_cursor.lnum;
 }
 
 /// Reduce the longest common string for match "match".
@@ -1164,13 +1190,9 @@ static void trigger_complete_changed_event(int cur)
     return;
   }
 
+  dict_T *item = cur < 0 ? tv_dict_alloc() : ins_compl_dict_alloc(compl_curr_match);
   dict_T *v_event = get_v_event(&save_v_event);
-  if (cur < 0) {
-    tv_dict_add_dict(v_event, S_LEN("completed_item"), tv_dict_alloc());
-  } else {
-    dict_T *item = ins_compl_dict_alloc(compl_curr_match);
-    tv_dict_add_dict(v_event, S_LEN("completed_item"), item);
-  }
+  tv_dict_add_dict(v_event, S_LEN("completed_item"), item);
   pum_set_event_info(v_event);
   tv_dict_set_keys_readonly(v_event);
 
@@ -1274,10 +1296,8 @@ static int ins_compl_build_pum(void)
           if (!compl_no_select) {
             compl_shown_match = comp;
           }
-        } else if (!fuzzy_sort && i == 0 && !compl_no_select) {
-          compl_shown_match = shown_compl;
         }
-        if (!shown_match_ok && comp == compl_shown_match && !compl_no_select) {
+        if (!shown_match_ok && comp == compl_shown_match) {
           cur = i;
           shown_match_ok = true;
         }
@@ -1304,6 +1324,12 @@ static int ins_compl_build_pum(void)
 
   if (compl_match_arraysize == 0) {
     return -1;
+  }
+
+  if (fuzzy_filter && !fuzzy_sort && !compl_no_select && !shown_match_ok) {
+    compl_shown_match = shown_compl;
+    shown_match_ok = true;
+    cur = 0;
   }
 
   assert(compl_match_arraysize >= 0);
@@ -1719,6 +1745,7 @@ void ins_compl_clear(void)
   compl_cont_status = 0;
   compl_started = false;
   compl_matches = 0;
+  compl_selected_item = -1;
   compl_ins_end_col = 0;
   API_CLEAR_STRING(compl_pattern);
   API_CLEAR_STRING(compl_leader);
@@ -1887,7 +1914,7 @@ static void ins_compl_new_leader(void)
     compl_restarting = false;
   }
 
-  compl_enter_selects = !compl_used_match;
+  compl_enter_selects = !compl_used_match && compl_selected_item != -1;
 
   // Show the popup menu with a different set of matches.
   ins_compl_show_pum();
@@ -1909,11 +1936,7 @@ static void ins_compl_new_leader(void)
 static int get_compl_len(void)
 {
   int off = (int)curwin->w_cursor.col - (int)compl_col;
-
-  if (off < 0) {
-    return 0;
-  }
-  return off;
+  return MAX(0, off);
 }
 
 /// Append one character to the match leader.  May reduce the number of
@@ -2154,11 +2177,9 @@ static bool ins_compl_stop(const int c, const int prev_mode, bool retval)
     // of the original text that has changed.
     // When using the longest match, edited the match or used
     // CTRL-E then don't use the current match.
-    char *ptr;
+    char *ptr = NULL;
     if (compl_curr_match != NULL && compl_used_match && c != Ctrl_E) {
       ptr = compl_curr_match->cp_str.data;
-    } else {
-      ptr = NULL;
     }
     ins_compl_fixRedoBufForLeader(ptr);
   }
@@ -2329,11 +2350,7 @@ bool ins_compl_prep(int c)
   } else if (ctrl_x_mode_not_default()) {
     // We're already in CTRL-X mode, do we stay in it?
     if (!vim_is_ctrl_x_key(c)) {
-      if (ctrl_x_mode_scroll()) {
-        ctrl_x_mode = CTRL_X_NORMAL;
-      } else {
-        ctrl_x_mode = CTRL_X_FINISHED;
-      }
+      ctrl_x_mode = ctrl_x_mode_scroll() ? CTRL_X_NORMAL : CTRL_X_FINISHED;
       edit_submode = NULL;
     }
     showmode();
@@ -2387,10 +2404,15 @@ static void ins_compl_fixRedoBufForLeader(char *ptr_arg)
   }
   if (compl_orig_text.data != NULL) {
     char *p = compl_orig_text.data;
-    for (len = 0; p[len] != NUL && p[len] == ptr[len]; len++) {}
+    // Find length of common prefix between original text and new completion
+    while (p[len] != NUL && p[len] == ptr[len]) {
+      len++;
+    }
+    // Adjust length to not break inside a multi-byte character
     if (len > 0) {
       len -= utf_head_off(p, p + len);
     }
+    // Add backspace characters for each remaining character in original text
     for (p += len; *p != NUL; MB_PTR_ADV(p)) {
       AppendCharToRedobuff(K_BS);
     }
@@ -2413,20 +2435,42 @@ static buf_T *ins_compl_next_buf(buf_T *buf, int flag)
       // first call for this flag/expansion or window was closed
       wp = curwin;
     }
+
     assert(wp);
-    while ((wp = (wp->w_next != NULL ? wp->w_next : firstwin)) != curwin
-           && wp->w_buffer->b_scanned) {}
+    while (true) {
+      // Move to next window (wrap to first window if at the end)
+      wp = (wp->w_next != NULL) ? wp->w_next : firstwin;
+      // Break if we're back at start or found an unscanned buffer
+      if (wp == curwin || !wp->w_buffer->b_scanned) {
+        break;
+      }
+    }
     buf = wp->w_buffer;
   } else {
     // 'b' (just loaded buffers), 'u' (just non-loaded buffers) or 'U'
     // (unlisted buffers)
     // When completing whole lines skip unloaded buffers.
-    while ((buf = (buf->b_next != NULL ? buf->b_next : firstbuf)) != curbuf
-           && ((flag == 'U'
-                ? buf->b_p_bl
-                : (!buf->b_p_bl
-                   || (buf->b_ml.ml_mfp == NULL) != (flag == 'u')))
-               || buf->b_scanned)) {}
+    while (true) {
+      // Move to next buffer (wrap to first buffer if at the end)
+      buf = (buf->b_next != NULL) ? buf->b_next : firstbuf;
+      // Break if we're back at start buffer
+      if (buf == curbuf) {
+        break;
+      }
+
+      bool skip_buffer;
+      // Check buffer conditions based on flag
+      if (flag == 'U') {
+        skip_buffer = buf->b_p_bl;
+      } else {
+        skip_buffer = !buf->b_p_bl || (buf->b_ml.ml_mfp == NULL) != (flag == 'u');
+      }
+
+      // Break if we found a buffer that matches our criteria
+      if (!skip_buffer && !buf->b_scanned) {
+        break;
+      }
+    }
   }
   return buf;
 }
@@ -2777,6 +2821,7 @@ static void set_completion(colnr_T startcol, list_T *list)
     startcol = curwin->w_cursor.col;
   }
   compl_col = startcol;
+  compl_lnum = curwin->w_cursor.lnum;
   compl_length = curwin->w_cursor.col - startcol;
   // compl_pattern doesn't need to be set
   compl_orig_text = cbuf_to_string(get_cursor_line_ptr() + compl_col,
@@ -3737,12 +3782,42 @@ void ins_compl_delete(bool new_leader)
     curwin->w_cursor.col = compl_ins_end_col;
   }
 
+  String remaining = STRING_INIT;
+  if (curwin->w_cursor.lnum > compl_lnum) {
+    if (curwin->w_cursor.col < get_cursor_line_len()) {
+      remaining = cbuf_to_string(get_cursor_pos_ptr(), (size_t)get_cursor_pos_len());
+    }
+
+    while (curwin->w_cursor.lnum > compl_lnum) {
+      if (ml_delete(curwin->w_cursor.lnum, false) == FAIL) {
+        if (remaining.data) {
+          xfree(remaining.data);
+        }
+        return;
+      }
+      deleted_lines_mark(curwin->w_cursor.lnum, 1);
+      curwin->w_cursor.lnum--;
+    }
+    // move cursor to end of line
+    curwin->w_cursor.col = get_cursor_line_len();
+  }
+
   if ((int)curwin->w_cursor.col > col) {
     if (stop_arrow() == FAIL) {
+      if (remaining.data) {
+        xfree(remaining.data);
+      }
       return;
     }
     backspace_until_column(col);
     compl_ins_end_col = curwin->w_cursor.col;
+  }
+
+  if (remaining.data != NULL) {
+    orig_col = curwin->w_cursor.col;
+    ins_str(remaining.data, remaining.size);
+    curwin->w_cursor.col = orig_col;
+    xfree(remaining.data);
   }
 
   // TODO(vim): is this sufficient for redrawing?  Redrawing everything
@@ -3750,6 +3825,35 @@ void ins_compl_delete(bool new_leader)
   changed_cline_bef_curs(curwin);
   // clear v:completed_item
   set_vim_var_dict(VV_COMPLETED_ITEM, tv_dict_alloc_lock(VAR_FIXED));
+}
+
+/// Insert a completion string that contains newlines.
+/// The string is split and inserted line by line.
+static void ins_compl_expand_multiple(char *str)
+{
+  char *start = str;
+  char *curr = str;
+  int base_indent = get_indent();
+  while (*curr != NUL) {
+    if (*curr == '\n') {
+      // Insert the text chunk before newline
+      if (curr > start) {
+        ins_char_bytes(start, (size_t)(curr - start));
+      }
+
+      // Handle newline
+      open_line(FORWARD, OPENLINE_KEEPTRAIL | OPENLINE_FORCE_INDENT, base_indent, NULL);
+      start = curr + 1;
+    }
+    curr++;
+  }
+
+  // Handle remaining text after last newline (if any)
+  if (curr > start) {
+    ins_char_bytes(start, (size_t)(curr - start));
+  }
+
+  compl_ins_end_col = curwin->w_cursor.col;
 }
 
 /// Insert the new text being completed.
@@ -3763,13 +3867,18 @@ void ins_compl_insert(bool in_compl_func, bool move_cursor)
   char *cp_str = compl_shown_match->cp_str.data;
   size_t cp_str_len = compl_shown_match->cp_str.size;
   size_t leader_len = ins_compl_leader_len();
+  char *has_multiple = strchr(cp_str, '\n');
 
   // Make sure we don't go over the end of the string, this can happen with
   // illegal bytes.
   if (compl_len < (int)cp_str_len) {
-    ins_compl_insert_bytes(cp_str + compl_len, -1);
-    if (preinsert && move_cursor) {
-      curwin->w_cursor.col -= (colnr_T)(cp_str_len - leader_len);
+    if (has_multiple) {
+      ins_compl_expand_multiple(cp_str + compl_len);
+    } else {
+      ins_compl_insert_bytes(cp_str + compl_len, -1);
+      if (preinsert && move_cursor) {
+        curwin->w_cursor.col -= (colnr_T)(cp_str_len - leader_len);
+      }
     }
   }
   compl_used_match = !(match_at_original_text(compl_shown_match) || preinsert);
@@ -4551,6 +4660,7 @@ static int ins_compl_start(void)
   char *line = ml_get(curwin->w_cursor.lnum);
   colnr_T curs_col = curwin->w_cursor.col;
   compl_pending = 0;
+  compl_lnum = curwin->w_cursor.lnum;
 
   if ((compl_cont_status & CONT_INTRPT) == CONT_INTRPT
       && compl_cont_mode == ctrl_x_mode) {
@@ -4602,6 +4712,7 @@ static int ins_compl_start(void)
       curbuf->b_p_com = old;
       compl_length = 0;
       compl_col = curwin->w_cursor.col;
+      compl_lnum = curwin->w_cursor.lnum;
     }
   } else {
     edit_submode_pre = NULL;

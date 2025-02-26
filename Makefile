@@ -1,4 +1,14 @@
 ifeq ($(OS),Windows_NT)
+  ifeq '$(findstring ;,$(PATH))' ';'
+    UNIX_LIKE := FALSE
+  else
+    UNIX_LIKE := TRUE
+  endif
+else
+  UNIX_LIKE := TRUE
+endif
+
+ifeq ($(UNIX_LIKE),FALSE)
   SHELL := powershell.exe
   .SHELLFLAGS := -NoProfile -NoLogo
   MKDIR := @$$null = new-item -itemtype directory -force
@@ -126,7 +136,7 @@ functionaltest-lua: | nvim
 	$(CMAKE) --build build --target functionaltest
 
 FORMAT=formatc formatlua format
-LINT=lintlua lintsh lintc clang-analyzer lintcommit lintdoc lint
+LINT=lintlua lintsh lintc clang-analyzer lintcommit lintdoc lint luals
 TEST=functionaltest unittest
 generated-sources benchmark $(FORMAT) $(LINT) $(TEST) doc: | build/.ran-cmake
 	$(CMAKE) --build build --target $@
