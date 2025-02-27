@@ -488,7 +488,7 @@ Object buffer_del_var(Buffer buffer, String name, Arena *arena, Error *err)
 ///
 /// @deprecated
 ///
-/// @param window   Window handle, or 0 for current window
+/// @param window   |window-ID|, or 0 for current window
 /// @param name     Variable name
 /// @param value    Variable value
 /// @param[out] err Error details, if any
@@ -512,7 +512,7 @@ Object window_set_var(Window window, String name, Object value, Arena *arena, Er
 ///
 /// @deprecated
 ///
-/// @param window   Window handle, or 0 for current window
+/// @param window   |window-ID|, or 0 for current window
 /// @param name     variable name
 /// @param[out] err Error details, if any
 /// @return Old value
@@ -532,7 +532,7 @@ Object window_del_var(Window window, String name, Arena *arena, Error *err)
 ///
 /// @deprecated
 ///
-/// @param tabpage  Tabpage handle, or 0 for current tabpage
+/// @param tabpage  |tab-ID|, or 0 for current tabpage
 /// @param name     Variable name
 /// @param value    Variable value
 /// @param[out] err Error details, if any
@@ -556,7 +556,7 @@ Object tabpage_set_var(Tabpage tabpage, String name, Object value, Arena *arena,
 ///
 /// @deprecated
 ///
-/// @param tabpage  Tabpage handle, or 0 for current tabpage
+/// @param tabpage  |tab-ID|, or 0 for current tabpage
 /// @param name     Variable name
 /// @param[out] err Error details, if any
 /// @return Old value
@@ -633,6 +633,7 @@ void nvim_set_option(uint64_t channel_id, String name, Object value, Error *err)
 Object nvim_get_option(String name, Error *err)
   FUNC_API_SINCE(1)
   FUNC_API_DEPRECATED_SINCE(11)
+  FUNC_API_RET_ALLOC
 {
   return get_option_from(NULL, kOptScopeGlobal, name, err);
 }
@@ -647,6 +648,7 @@ Object nvim_get_option(String name, Error *err)
 Object nvim_buf_get_option(Buffer buffer, String name, Error *err)
   FUNC_API_SINCE(1)
   FUNC_API_DEPRECATED_SINCE(11)
+  FUNC_API_RET_ALLOC
 {
   buf_T *buf = find_buffer_by_handle(buffer, err);
 
@@ -682,13 +684,14 @@ void nvim_buf_set_option(uint64_t channel_id, Buffer buffer, String name, Object
 /// Gets a window option value
 ///
 /// @deprecated
-/// @param window   Window handle, or 0 for current window
+/// @param window   |window-ID|, or 0 for current window
 /// @param name     Option name
 /// @param[out] err Error details, if any
 /// @return Option value
 Object nvim_win_get_option(Window window, String name, Error *err)
   FUNC_API_SINCE(1)
   FUNC_API_DEPRECATED_SINCE(11)
+  FUNC_API_RET_ALLOC
 {
   win_T *win = find_window_by_handle(window, err);
 
@@ -704,7 +707,7 @@ Object nvim_win_get_option(Window window, String name, Error *err)
 ///
 /// @deprecated
 /// @param channel_id
-/// @param window   Window handle, or 0 for current window
+/// @param window   |window-ID|, or 0 for current window
 /// @param name     Option name
 /// @param value    Option value
 /// @param[out] err Error details, if any
@@ -728,7 +731,7 @@ void nvim_win_set_option(uint64_t channel_id, Window window, String name, Object
 /// @param       name       The option name.
 /// @param[out]  err        Details of an error that may have occurred.
 ///
-/// @return  the option value.
+/// @return  the option value. Must be freed by caller.
 static Object get_option_from(void *from, OptScope scope, String name, Error *err)
 {
   VALIDATE_S(name.size > 0, "option name", "<empty>", {

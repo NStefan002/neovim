@@ -15,9 +15,9 @@ local function w(s)
   end
 end
 
-local options = require('options')
-local auevents = require('auevents')
-local ex_cmds = require('ex_cmds')
+local options = require('nvim.options')
+local auevents = require('nvim.auevents')
+local ex_cmds = require('nvim.ex_cmds')
 
 local function cmd_kw(prev_cmd, cmd)
   if not prev_cmd then
@@ -114,19 +114,19 @@ local vimau_start = 'syn keyword vimAutoEvent contained '
 w('\n\n' .. vimau_start)
 
 for _, au in ipairs(auevents.events) do
-  if not auevents.nvim_specific[au] then
+  if not auevents.nvim_specific[au[1]] then
     if lld.line_length > 850 then
       w('\n' .. vimau_start)
     end
-    w(' ' .. au)
+    w(' ' .. au[1])
+    for _, alias in ipairs(au[2]) do
+      if lld.line_length > 850 then
+        w('\n' .. vimau_start)
+      end
+      -- au[1] is aliased to alias
+      w(' ' .. alias)
+    end
   end
-end
-for _, au in pairs(auevents.aliases) do
-  if lld.line_length > 850 then
-    w('\n' .. vimau_start)
-  end
-  -- au[1] is aliased to au[2]
-  w(' ' .. au[1])
 end
 
 local nvimau_start = 'syn keyword nvimAutoEvent contained '

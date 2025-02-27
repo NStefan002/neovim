@@ -609,12 +609,13 @@ function M._new_argv(...)
   return args, env, io_extra
 end
 
+--- Dedents string arguments and inserts the resulting text into the current buffer.
 --- @param ... string
 function M.insert(...)
   nvim_feed('i')
   for _, v in ipairs({ ... }) do
     local escaped = v:gsub('<', '<lt>')
-    M.feed(escaped)
+    M.feed(escaped) -- This also dedents :P
   end
   nvim_feed('<ESC>')
 end
@@ -812,6 +813,7 @@ function M.rmdir(path)
   end
 end
 
+--- @deprecated Use `t.pcall_err()` to check failure, or `n.command()` to check success.
 function M.exc_exec(cmd)
   M.command(([[
     try
@@ -908,8 +910,10 @@ function M.is_asan()
   return version:match('-fsanitize=[a-z,]*address')
 end
 
--- Returns a valid, platform-independent Nvim listen address.
--- Useful for communicating with child instances.
+--- Returns a valid, platform-independent Nvim listen address.
+--- Useful for communicating with child instances.
+---
+--- @return string
 function M.new_pipename()
   -- HACK: Start a server temporarily, get the name, then stop it.
   local pipename = M.eval('serverstart()')
@@ -974,18 +978,6 @@ end
 function M.add_builddir_to_rtp()
   -- Add runtime from build dir for doc/tags (used with :help).
   M.command(string.format([[set rtp+=%s/runtime]], t.paths.test_build_dir))
-end
-
---- Kill (reap) a process by PID.
---- @param pid string
---- @return boolean?
-function M.os_kill(pid)
-  return os.execute(
-    (
-      is_os('win') and 'taskkill /f /t /pid ' .. pid .. ' > nul'
-      or 'kill -9 ' .. pid .. ' > /dev/null'
-    )
-  )
 end
 
 --- Create folder with non existing parents

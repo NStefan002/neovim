@@ -288,15 +288,23 @@ function STHighlighter:send_request()
         method = method .. '/delta'
         params.previousResultId = current_result.result_id
       end
+      ---@param response? lsp.SemanticTokens|lsp.SemanticTokensDelta
       local success, request_id = client:request(method, params, function(err, response, ctx)
         -- look client up again using ctx.client_id instead of using a captured
         -- client object
         local c = vim.lsp.get_client_by_id(ctx.client_id)
         local bufnr = assert(ctx.bufnr)
         local highlighter = STHighlighter.active[bufnr]
-        if not err and c and highlighter then
-          coroutine.wrap(STHighlighter.process_response)(highlighter, response, c, version)
+        if not (c and highlighter) then
+          return
         end
+
+        if err or not response then
+          highlighter.client_state[c.id].active_request = {}
+          return
+        end
+
+        coroutine.wrap(STHighlighter.process_response)(highlighter, response, c, version)
       end, self.bufnr)
 
       if success then
@@ -331,9 +339,7 @@ function STHighlighter:process_response(response, client, version)
     return
   end
 
-  -- skip nil responses
-  if response == nil then
-    state.active_request = {}
+  if not api.nvim_buf_is_valid(self.bufnr) then
     return
   end
 
@@ -376,8 +382,10 @@ function STHighlighter:process_response(response, client, version)
   current_result.highlights = highlights
   current_result.namespace_cleared = false
 
-  -- redraw all windows displaying buffer
-  api.nvim__redraw({ buf = self.bufnr, valid = true })
+  -- redraw all windows displaying buffer (if still valid)
+  if api.nvim_buf_is_valid(self.bufnr) then
+    api.nvim__redraw({ buf = self.bufnr, valid = true })
+  end
 end
 
 --- @param bufnr integer

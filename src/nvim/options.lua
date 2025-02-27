@@ -2152,7 +2152,7 @@ local options = {
     {
       abbreviation = 'dip',
       cb = 'did_set_diffopt',
-      defaults = 'internal,filler,closeoff',
+      defaults = 'internal,filler,closeoff,linematch:40',
       -- Keep this in sync with diffopt_changed().
       values = {
         'filler',
@@ -2626,6 +2626,23 @@ local options = {
       short_desc = N_('autocommand events that are ignored'),
       type = 'string',
       varname = 'p_ei',
+    },
+    {
+      abbreviation = 'eiw',
+      cb = 'did_set_eventignore',
+      defaults = '',
+      deny_duplicates = true,
+      desc = [=[
+        Similar to 'eventignore' but applies to a particular window and its
+        buffers, for which window and buffer related autocommands can be
+        ignored indefinitely without affecting the global 'eventignore'.
+      ]=],
+      expand_cb = 'expand_set_eventignore',
+      full_name = 'eventignorewin',
+      list = 'onecomma',
+      scope = { 'win' },
+      short_desc = N_('autocommand events that are ignored in a window'),
+      type = 'string',
     },
     {
       abbreviation = 'et',

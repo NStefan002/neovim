@@ -264,7 +264,7 @@ end
 --- @class vim.lsp.LocationOpts.OnList
 --- @field items table[] Structured like |setqflist-what|
 --- @field title? string Title for the list.
---- @field context? table `ctx` from |lsp-handler|
+--- @field context? { bufnr: integer, method: string } Subset of `ctx` from |lsp-handler|.
 
 --- @class vim.lsp.LocationOpts: vim.lsp.ListOpts
 ---
@@ -315,6 +315,7 @@ local function process_signature_help_results(results)
       local result = r.result --- @type lsp.SignatureHelp
       if result and result.signatures and result.signatures[1] then
         for _, sig in ipairs(result.signatures) do
+          sig.activeParameter = sig.activeParameter or result.activeParameter
           signatures[#signatures + 1] = { client, sig }
         end
       end
