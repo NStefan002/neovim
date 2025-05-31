@@ -1450,6 +1450,7 @@ M.funcs = {
          "omni"	     Omni completion |i_CTRL-X_CTRL-O|
          "spell"	     Spelling suggestions |i_CTRL-X_s|
          "eval"	     |complete()| completion
+         "register"	     Words from registers |i_CTRL-X_CTRL-R|
          "unknown"	     Other internal modes
 
       If the optional {what} list argument is supplied, then only
@@ -9319,11 +9320,11 @@ M.funcs = {
 
       To get the last search count when |n| or |N| was pressed, call
       this function with `recompute: 0` . This sometimes returns
-      wrong information because |n| and |N|'s maximum count is 99.
-      If it exceeded 99 the result must be max count + 1 (100). If
+      wrong information because |n| and |N|'s maximum count is 999.
+      If it exceeded 999 the result must be max count + 1 (1000). If
       you want to get correct information, specify `recompute: 1`: >vim
 
-      	" result == maxcount + 1 (100) when many matches
+      	" result == maxcount + 1 (1000) when many matches
       	let result = searchcount(#{recompute: 0})
 
       	" Below returns correct result (recompute defaults

@@ -2047,6 +2047,12 @@ vim.go.efm = vim.go.errorformat
 ---     set ei=WinEnter,WinLeave
 --- ```
 ---
+--- To ignore all but some events, a "-" prefix can be used:
+---
+--- ```vim
+---     :set ei=all,-WinLeave
+--- ```
+---
 ---
 --- @type string
 vim.o.eventignore = ""
@@ -2079,6 +2085,9 @@ vim.bo.et = vim.bo.expandtab
 --- .nvimrc, or .exrc file found in the `current-directory` and all parent
 --- directories (ordered upwards), if the files are in the `trust` list.
 --- Use `:trust` to manage trusted files. See also `vim.secure.read()`.
+---
+--- Unset 'exrc' to stop further searching of 'exrc' files in parent
+--- directories, similar to `editorconfig.root`.
 ---
 --- Compare 'exrc' to `editorconfig`:
 --- - 'exrc' can execute any code; editorconfig only specifies settings.
@@ -2310,7 +2319,8 @@ vim.go.fic = vim.go.fileignorecase
 --- one dot may appear.
 --- This option is not copied to another buffer, independent of the 's' or
 --- 'S' flag in 'cpoptions'.
---- Only alphanumeric characters, '-' and '_' can be used.
+--- Only alphanumeric characters, '-' and '_' can be used (and a '.' is
+--- allowed as delimiter when combining different filetypes).
 ---
 --- @type string
 vim.o.filetype = ""
@@ -2822,6 +2832,8 @@ vim.go.gd = vim.go.gdefault
 --- @type string
 vim.o.grepformat = "%f:%l:%m,%f:%l%m,%f  %l%m"
 vim.o.gfm = vim.o.grepformat
+vim.bo.grepformat = vim.o.grepformat
+vim.bo.gfm = vim.bo.grepformat
 vim.go.grepformat = vim.o.grepformat
 vim.go.gfm = vim.go.grepformat
 
@@ -3180,7 +3192,8 @@ vim.o.iconstring = ""
 vim.go.iconstring = vim.o.iconstring
 
 --- Ignore case in search patterns, `cmdline-completion`, when
---- searching in the tags file, and `expr-==`.
+--- searching in the tags file, `expr-==` and for Insert-mode completion
+--- `ins-completion`.
 --- Also see 'smartcase' and 'tagcase'.
 --- Can be overruled by using "\c" or "\C" in the pattern, see
 --- `/ignorecase`.
@@ -6919,45 +6932,12 @@ vim.o.tpm = vim.o.tabpagemax
 vim.go.tabpagemax = vim.o.tabpagemax
 vim.go.tpm = vim.go.tabpagemax
 
---- Number of spaces that a <Tab> in the file counts for.  Also see
---- the `:retab` command, and the 'softtabstop' option.
----
---- Note: Setting 'tabstop' to any other value than 8 can make your file
---- appear wrong in many places.
---- The value must be more than 0 and less than 10000.
----
---- There are five main ways to use tabs in Vim:
---- 1. Always keep 'tabstop' at 8, set 'softtabstop' and 'shiftwidth' to 4
----    (or 3 or whatever you prefer) and use 'noexpandtab'.  Then Vim
----    will use a mix of tabs and spaces, but typing <Tab> and <BS> will
----    behave like a tab appears every 4 (or 3) characters.
----    This is the recommended way, the file will look the same with other
----    tools and when listing it in a terminal.
---- 2. Set 'softtabstop' and 'shiftwidth' to whatever you prefer and use
----    'expandtab'.  This way you will always insert spaces.  The
----    formatting will never be messed up when 'tabstop' is changed (leave
----    it at 8 just in case).  The file will be a bit larger.
----    You do need to check if no Tabs exist in the file.  You can get rid
----    of them by first setting 'expandtab' and using `%retab!`, making
----    sure the value of 'tabstop' is set correctly.
---- 3. Set 'tabstop' and 'shiftwidth' to whatever you prefer and use
----    'expandtab'.  This way you will always insert spaces.  The
----    formatting will never be messed up when 'tabstop' is changed.
----    You do need to check if no Tabs exist in the file, just like in the
----    item just above.
---- 4. Set 'tabstop' and 'shiftwidth' to whatever you prefer and use a
----    `modeline` to set these values when editing the file again.  Only
----    works when using Vim to edit the file, other tools assume a tabstop
----    is worth 8 spaces.
---- 5. Always set 'tabstop' and 'shiftwidth' to the same value, and
----    'noexpandtab'.  This should then work (for initial indents only)
----    for any tabstop setting that people use.  It might be nice to have
----    tabs after the first non-blank inserted as spaces if you do this
----    though.  Otherwise aligned comments will be wrong when 'tabstop' is
----    changed.
----
---- The value of 'tabstop' will be ignored if `'vartabstop'` is set to
---- anything other than an empty string.
+--- Defines the column multiple used to display the Horizontal Tab
+--- character (ASCII 9); a Horizontal Tab always advances to the next
+--- tab stop.
+--- The value must be at least 1 and at most 9999.
+--- If `'vartabstop'` is set, this option is ignored.
+--- Leave it at 8 unless you have a strong reason (see usr `30.5`).
 ---
 --- @type integer
 vim.o.tabstop = 8
