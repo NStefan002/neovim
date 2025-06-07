@@ -49,7 +49,10 @@ local hrtime = vim.uv.hrtime
 local default_parse_timeout_ns = 3 * 1000000
 
 ---@type Range2
-local entire_document_range = { 0, math.huge }
+local entire_document_range = {
+  0,
+  math.huge --[[@as integer]],
+}
 
 ---@alias TSCallbackName
 ---| 'changedtree'
@@ -897,7 +900,7 @@ local function clip_regions(region1, region2)
     end
 
     -- Advance the range that ends earlier
-    if Range.cmp_pos.le(r1[3], r1[4], r2[3], r2[4]) then
+    if Range.cmp_pos.le(r1[4], r1[5], r2[4], r2[5]) then
       i = i + 1
     else
       j = j + 1

@@ -3598,6 +3598,28 @@ func Test_Visual_doautoall_redraw()
   %bwipe!
 endfunc
 
+func Test_get_Visual_selection_in_curbuf_autocmd()
+  throw 'Skipped: use test/functional/legacy/autocmd_spec.lua'
+  call test_override('starting', 1)
+  new
+  autocmd OptionSet list let b:text = getregion(getpos('.'), getpos('v'))
+  call setline(1, 'foo bar baz')
+
+  normal! gg0fbvtb
+  setlocal list
+  call assert_equal(['bar '], b:text)
+  exe "normal! \<Esc>"
+
+  normal! v0
+  call setbufvar('%', '&list', v:false)
+  call assert_equal(['foo bar '], b:text)
+  exe "normal! \<Esc>"
+
+  autocmd! OptionSet list
+  bwipe!
+  call test_override('starting', 0)
+endfunc
+
 " This was using freed memory.
 func Test_BufNew_arglocal()
   arglocal
@@ -4503,6 +4525,49 @@ func Test_reuse_curbuf_leak()
   call assert_equal('bar', bufname(s:bar_buf))
 
   unlet! s:bar_buf s:triggered
+  call CleanUpTestAuGroup()
+  %bw!
+endfunc
+
+func Test_reuse_curbuf_switch()
+  edit asdf
+  let s:asdf_win = win_getid()
+  new
+  let other_buf = bufnr()
+  let other_win = win_getid()
+  augroup testing
+    autocmd!
+    autocmd BufUnload * ++once let s:triggered = 1
+          \| call assert_fails('split', 'E1159:')
+          \| call win_gotoid(s:asdf_win)
+  augroup END
+
+  " Check BufUnload changing curbuf does not cause buflist_new to create a new
+  " buffer while leaving "other_buf" unloaded in a window.
+  enew
+  call assert_equal(1, s:triggered)
+  call assert_equal(other_buf, bufnr())
+  call assert_equal(other_win, win_getid())
+  call assert_equal(1, win_findbuf(other_buf)->len())
+  call assert_equal(1, bufloaded(other_buf))
+
+  unlet! s:asdf_win s:triggered
+  call CleanUpTestAuGroup()
+  %bw!
+endfunc
+
+func Test_eventignore_subtract()
+  set eventignore=all,-WinEnter
+  augroup testing
+    autocmd!
+    autocmd WinEnter * ++once let s:triggered = 1
+  augroup END
+
+  new
+  call assert_equal(1, s:triggered)
+
+  set eventignore&
+  unlet! s:triggered
   call CleanUpTestAuGroup()
   %bw!
 endfunc

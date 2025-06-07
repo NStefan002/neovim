@@ -1187,10 +1187,12 @@ void ex_messages(exarg_T *eap)
   Array entries = ARRAY_DICT_INIT;
   MessageHistoryEntry *p = eap->skip ? msg_hist_temp : msg_hist_first;
   int skip = eap->addr_count ? (msg_hist_len - eap->line2) : 0;
-  while (p != NULL) {
+  for (; p != NULL; p = p->next) {
+    // Skip over count or temporary "g<" messages.
     if ((p->temp && !eap->skip) || skip-- > 0) {
-      // Skipping over count or temporary "g<" messages.
-    } else if (ui_has(kUIMessages)) {
+      continue;
+    }
+    if (ui_has(kUIMessages) && !msg_silent) {
       Array entry = ARRAY_DICT_INIT;
       ADD(entry, CSTR_TO_OBJ(p->kind));
       Array content = ARRAY_DICT_INIT;
@@ -1204,10 +1206,12 @@ void ex_messages(exarg_T *eap)
       }
       ADD(entry, ARRAY_OBJ(content));
       ADD(entries, ARRAY_OBJ(entry));
-    } else {
-      msg_multihl(p->msg, p->kind, false, false);
     }
-    p = p->next;
+    if (redirecting() || !ui_has(kUIMessages)) {
+      msg_silent += ui_has(kUIMessages);
+      msg_multihl(p->msg, p->kind, false, false);
+      msg_silent -= ui_has(kUIMessages);
+    }
   }
   if (kv_size(entries) > 0) {
     ui_call_msg_history_show(entries);
@@ -2019,6 +2023,11 @@ void msg_prt_line(const char *s, bool list)
     } else {
       hl_id = 0;
       int c = (uint8_t)(*s++);
+      if (c >= 0x80) {  // Illegal byte
+        col += utf_char2cells(c);
+        msg_putchar(c);
+        continue;
+      }
       sc_extra = NUL;
       sc_final = NUL;
       if (list) {
@@ -3180,7 +3189,8 @@ void msg_ext_ui_flush(void)
   msg_ext_emit_chunk();
   if (msg_ext_chunks->size > 0) {
     Array *tofree = msg_ext_init_chunks();
-    ui_call_msg_show(cstr_as_string(msg_ext_kind), *tofree, msg_ext_overwrite, msg_ext_history);
+    ui_call_msg_show(cstr_as_string(msg_ext_kind), *tofree, msg_ext_overwrite, msg_ext_history,
+                     msg_ext_append);
     if (msg_ext_history || strequal(msg_ext_kind, "return_prompt")) {
       api_free_array(*tofree);
     } else {
@@ -3200,6 +3210,7 @@ void msg_ext_ui_flush(void)
     }
     msg_ext_overwrite = false;
     msg_ext_history = false;
+    msg_ext_append = false;
     msg_ext_kind = NULL;
   }
 }

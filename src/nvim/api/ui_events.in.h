@@ -29,6 +29,8 @@ void visual_bell(void)
   FUNC_API_SINCE(3);
 void flush(void)
   FUNC_API_SINCE(3) FUNC_API_REMOTE_IMPL;
+void restart(void)
+  FUNC_API_SINCE(14) FUNC_API_REMOTE_ONLY FUNC_API_CLIENT_IMPL;
 void suspend(void)
   FUNC_API_SINCE(3);
 void set_title(String title)
@@ -160,7 +162,7 @@ void wildmenu_select(Integer selected)
 void wildmenu_hide(void)
   FUNC_API_SINCE(3) FUNC_API_REMOTE_ONLY;
 
-void msg_show(String kind, Array content, Boolean replace_last, Boolean history)
+void msg_show(String kind, Array content, Boolean replace_last, Boolean history, Boolean append)
   FUNC_API_SINCE(6) FUNC_API_FAST FUNC_API_REMOTE_ONLY;
 void msg_clear(void)
   FUNC_API_SINCE(6) FUNC_API_REMOTE_ONLY;
