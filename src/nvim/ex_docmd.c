@@ -69,7 +69,6 @@
 #include "nvim/message.h"
 #include "nvim/mouse.h"
 #include "nvim/move.h"
-#include "nvim/msgpack_rpc/server.h"
 #include "nvim/normal.h"
 #include "nvim/normal_defs.h"
 #include "nvim/ops.h"
@@ -101,6 +100,7 @@
 #include "nvim/tag.h"
 #include "nvim/types_defs.h"
 #include "nvim/ui.h"
+#include "nvim/ui_client.h"
 #include "nvim/undo.h"
 #include "nvim/undo_defs.h"
 #include "nvim/usercmd.h"
@@ -4828,16 +4828,23 @@ int before_quit_all(exarg_T *eap)
 }
 
 /// ":qall": try to quit all windows
-static void ex_quit_all(exarg_T *eap)
+/// ":restart": restart the Nvim server
+static void ex_quitall_or_restart(exarg_T *eap)
 {
   if (before_quit_all(eap) == FAIL) {
     return;
   }
   exiting = true;
-  if (eap->forceit || !check_changed_any(false, false)) {
+  Error err = ERROR_INIT;
+  if ((eap->forceit || !check_changed_any(false, false))
+      && (eap->cmdidx != CMD_restart || remote_ui_restart(current_ui, &err))) {
     getout(0);
   }
   not_exiting();
+  if (ERROR_SET(&err)) {
+    emsg(err.msg);  // UI disappeared already?
+    api_clear_error(&err);
+  }
 }
 
 /// ":close": close current window, unless it is the last one
@@ -5553,8 +5560,8 @@ static void ex_detach(exarg_T *eap)
   if (eap && eap->forceit) {
     emsg("bang (!) not supported yet");
   } else {
-    // 1. (TODO) Send "detach" UI-event (notification only).
-    // 2. Perform server-side `nvim_ui_detach`.
+    // 1. Send "error_exit" UI-event (notification only).
+    // 2. Perform server-side UI detach.
     // 3. Close server-side channel without self-exit.
 
     if (!current_ui) {
@@ -5571,7 +5578,7 @@ static void ex_detach(exarg_T *eap)
 
     // Server-side UI detach. Doesn't close the channel.
     Error err2 = ERROR_INIT;
-    nvim_ui_detach(chan->id, &err2);
+    remote_ui_disconnect(chan->id, &err2, true);
     if (ERROR_SET(&err2)) {
       emsg(err2.msg);  // UI disappeared already?
       api_clear_error(&err2);
@@ -8179,4 +8186,19 @@ void verify_command(char *cmd)
 uint32_t get_cmd_argt(cmdidx_T cmdidx)
 {
   return cmdnames[(int)cmdidx].cmd_argt;
+}
+
+/// Check if a command is a :map/:abbrev command.
+bool is_map_cmd(cmdidx_T cmdidx)
+{
+  if (IS_USER_CMDIDX(cmdidx)) {
+    return false;
+  }
+
+  ex_func_T func = cmdnames[cmdidx].cmd_func;
+  return func == ex_map           // :map, :nmap, :noremap, etc.
+         || func == ex_unmap         // :unmap, :nunmap, etc.
+         || func == ex_mapclear      // :mapclear, :nmapclear, etc.
+         || func == ex_abbreviate    // :abbreviate, :iabbrev, etc.
+         || func == ex_abclear;      // :abclear, :iabclear, etc.
 }

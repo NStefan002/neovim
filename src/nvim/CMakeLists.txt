@@ -481,11 +481,13 @@ foreach(target ${targets})
     message(STATUS "${target} props '${prop}'")
     foreach(gen_include ${prop})
       list(APPEND gen_cflags "-I${gen_include}")
+      list(APPEND TEST_INCLUDE_DIRS "${gen_include}")
     endforeach()
   endif()
 endforeach()
 
 list(REMOVE_DUPLICATES gen_cflags)
+list(REMOVE_DUPLICATES TEST_INCLUDE_DIRS)
 
 if(APPLE AND CMAKE_OSX_SYSROOT)
   list(APPEND gen_cflags "-isysroot" "${CMAKE_OSX_SYSROOT}")
@@ -979,7 +981,7 @@ add_target(doc-eval
     ${PROJECT_SOURCE_DIR}/src/nvim/eval.lua
     ${PROJECT_SOURCE_DIR}/src/nvim/options.lua
     ${PROJECT_SOURCE_DIR}/src/nvim/vvars.lua
-    ${NVIM_RUNTIME_DIR}/doc/builtin.txt
+    ${NVIM_RUNTIME_DIR}/doc/vimfn.txt
   )
 
 add_custom_target(doc)

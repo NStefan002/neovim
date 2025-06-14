@@ -844,6 +844,7 @@ void ui_ext_win_position(win_T *wp, bool validate)
         }
         int row_off = 0;
         int col_off = 0;
+        win_grid_alloc(win);
         grid = grid_adjust(&win->w_grid, &row_off, &col_off);
         row += row_off;
         col += col_off;
@@ -7468,7 +7469,7 @@ void win_get_tabwin(handle_T id, int *tabnr, int *winnr)
         *tabnr = tnum;
         return;
       }
-      wnum++;
+      wnum += win_has_winnr(wp);
     }
     tnum++;
     wnum = 1;

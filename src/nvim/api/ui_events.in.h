@@ -29,6 +29,8 @@ void visual_bell(void)
   FUNC_API_SINCE(3);
 void flush(void)
   FUNC_API_SINCE(3) FUNC_API_REMOTE_IMPL;
+void restart(String progpath, Array argv)
+  FUNC_API_SINCE(14) FUNC_API_REMOTE_ONLY FUNC_API_REMOTE_IMPL FUNC_API_CLIENT_IMPL;
 void suspend(void)
   FUNC_API_SINCE(3);
 void set_title(String title)
@@ -160,7 +162,7 @@ void wildmenu_select(Integer selected)
 void wildmenu_hide(void)
   FUNC_API_SINCE(3) FUNC_API_REMOTE_ONLY;
 
-void msg_show(String kind, Array content, Boolean replace_last, Boolean history)
+void msg_show(String kind, Array content, Boolean replace_last, Boolean history, Boolean append)
   FUNC_API_SINCE(6) FUNC_API_FAST FUNC_API_REMOTE_ONLY;
 void msg_clear(void)
   FUNC_API_SINCE(6) FUNC_API_REMOTE_ONLY;
@@ -175,5 +177,13 @@ void msg_history_show(Array entries)
 void msg_history_clear(void)
   FUNC_API_SINCE(10) FUNC_API_REMOTE_ONLY;
 
+// This UI event is currently undocumented.
+// - When the server needs to intentionally exit with an exit code, and there is no
+//   message in server stderr for the user, this event is sent with positive `status`
+//   argument, to indicate that the UI should exit normally with `status`.
+// - When the server has crashed or there is a message in server stderr for the user,
+//   this event is not sent, and the UI should make server stderr visible.
+// - When :detach is used on the server, this event is sent with a zero `status`
+//   argument, to indicate that the UI shouldn't wait for server exit.
 void error_exit(Integer status)
-  FUNC_API_SINCE(12);
+  FUNC_API_SINCE(12) FUNC_API_CLIENT_IMPL;

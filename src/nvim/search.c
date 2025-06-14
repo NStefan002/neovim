@@ -2724,12 +2724,9 @@ static void update_search_stat(int dirc, pos_T *pos, pos_T *cursor_pos, searchst
                 || (dirc == '/' && lt(p, lastpos)));
 
   // If anything relevant changed the count has to be recomputed.
-  // STRNICMP ignores case, but we should not ignore case.
-  // Unfortunately, there is no STRNICMP function.
-  // XXX: above comment should be "no MB_STRCMP function" ?
   if (!(chgtick == buf_get_changedtick(curbuf)
         && (lastpat != NULL  // suppress clang/NULL passed as nonnull parameter
-            && mb_strnicmp(lastpat, spats[last_idx].pat, lastpatlen) == 0
+            && strncmp(lastpat, spats[last_idx].pat, lastpatlen) == 0
             && lastpatlen == spats[last_idx].patlen)
         && equalpos(lastpos, *cursor_pos)
         && lbuf == curbuf)
@@ -3024,6 +3021,11 @@ static int fuzzy_match_compute_score(const char *const fuzpat, const char *const
   // Apply unmatched penalty
   const int unmatched = strSz - numMatches;
   score += UNMATCHED_LETTER_PENALTY * unmatched;
+  // In a long string, not all matches may be found due to the recursion limit.
+  // If at least one match is found, reset the score to a non-negative value.
+  if (score < 0 && numMatches > 0) {
+    score = 0;
+  }
 
   // Apply ordering bonuses
   for (int i = 0; i < numMatches; i++) {
