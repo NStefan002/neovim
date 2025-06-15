@@ -1027,6 +1027,28 @@ vim.bo.cms = vim.bo.commentstring
 --- ]	tag completion
 --- t	same as "]"
 --- f	scan the buffer names (as opposed to buffer contents)
+--- F{func}	call the function {func}.  Multiple "F" flags may be specified.
+--- 	Refer to `complete-functions` for details on how the function
+--- 	is invoked and what it should return.  The value can be the
+--- 	name of a function or a `Funcref`.  For `Funcref` values,
+--- 	spaces must be escaped with a backslash ('\'), and commas with
+--- 	double backslashes ('\\') (see `option-backslash`).
+--- 	If the Dict returned by the {func} includes {"refresh": "always"},
+--- 	the function will be invoked again whenever the leading text
+--- 	changes.
+--- 	Completion matches are always inserted at the keyword
+--- 	boundary, regardless of the column returned by {func} when
+--- 	a:findstart is 1.  This ensures compatibility with other
+--- 	completion sources.
+--- 	To make further modifications to the inserted text, {func}
+--- 	can make use of `CompleteDonePre`.
+--- 	If generating matches is potentially slow, `complete_check()`
+--- 	should be used to avoid blocking and preserve editor
+--- 	responsiveness.
+--- F	equivalent to using "F{func}", where the function is taken from
+--- 	the 'completefunc' option.
+--- o	equivalent to using "F{func}", where the function is taken from
+--- 	the 'omnifunc' option.
 ---
 --- Unloaded buffers are not loaded, thus their autocmds `:autocmd` are
 --- not executed, this may lead to unexpected completions from some files
@@ -1036,6 +1058,13 @@ vim.bo.cms = vim.bo.commentstring
 --- As you can see, CTRL-N and CTRL-P can be used to do any 'iskeyword'-
 --- based expansion (e.g., dictionary `i_CTRL-X_CTRL-K`, included patterns
 --- `i_CTRL-X_CTRL-I`, tags `i_CTRL-X_CTRL-]` and normal expansions).
+---
+--- An optional match limit can be specified for a completion source by
+--- appending a caret ("^") followed by a {count} to the source flag.
+--- For example: ".^9,w,u,t^5" limits matches from the current buffer
+--- to 9 and from tags to 5.  Other sources remain unlimited.
+--- Note: The match limit takes effect only during forward completion
+--- (CTRL-N) and is ignored during backward completion (CTRL-P).
 ---
 --- @type string
 vim.o.complete = ".,w,b,u,t"
@@ -1154,6 +1183,9 @@ vim.go.cia = vim.go.completeitemalign
 ---    preview  Show extra information about the currently selected
 --- 	    completion in the preview window.  Only works in
 --- 	    combination with "menu" or "menuone".
+---
+--- This option does not apply to `cmdline-completion`. See 'wildoptions'
+--- for that.
 ---
 --- @type string
 vim.o.completeopt = "menu,popup"
@@ -2047,6 +2079,12 @@ vim.go.efm = vim.go.errorformat
 ---     set ei=WinEnter,WinLeave
 --- ```
 ---
+--- To ignore all but some events, a "-" prefix can be used:
+---
+--- ```vim
+---     :set ei=all,-WinLeave
+--- ```
+---
 ---
 --- @type string
 vim.o.eventignore = ""
@@ -2079,6 +2117,9 @@ vim.bo.et = vim.bo.expandtab
 --- .nvimrc, or .exrc file found in the `current-directory` and all parent
 --- directories (ordered upwards), if the files are in the `trust` list.
 --- Use `:trust` to manage trusted files. See also `vim.secure.read()`.
+---
+--- Unset 'exrc' to stop further searching of 'exrc' files in parent
+--- directories, similar to `editorconfig.root`.
 ---
 --- Compare 'exrc' to `editorconfig`:
 --- - 'exrc' can execute any code; editorconfig only specifies settings.
@@ -2310,7 +2351,8 @@ vim.go.fic = vim.go.fileignorecase
 --- one dot may appear.
 --- This option is not copied to another buffer, independent of the 's' or
 --- 'S' flag in 'cpoptions'.
---- Only alphanumeric characters, '-' and '_' can be used.
+--- Only alphanumeric characters, '-' and '_' can be used (and a '.' is
+--- allowed as delimiter when combining different filetypes).
 ---
 --- @type string
 vim.o.filetype = ""
@@ -2822,6 +2864,8 @@ vim.go.gd = vim.go.gdefault
 --- @type string
 vim.o.grepformat = "%f:%l:%m,%f:%l%m,%f  %l%m"
 vim.o.gfm = vim.o.grepformat
+vim.bo.grepformat = vim.o.grepformat
+vim.bo.gfm = vim.bo.grepformat
 vim.go.grepformat = vim.o.grepformat
 vim.go.gfm = vim.go.grepformat
 
@@ -3180,7 +3224,8 @@ vim.o.iconstring = ""
 vim.go.iconstring = vim.o.iconstring
 
 --- Ignore case in search patterns, `cmdline-completion`, when
---- searching in the tags file, and `expr-==`.
+--- searching in the tags file, `expr-==` and for Insert-mode completion
+--- `ins-completion`.
 --- Also see 'smartcase' and 'tagcase'.
 --- Can be overruled by using "\c" or "\C" in the pattern, see
 --- `/ignorecase`.
@@ -5372,9 +5417,14 @@ vim.go.sect = vim.go.sections
 --- the end of line the line break still isn't included.
 --- When "exclusive" is used, cursor position in visual mode will be
 --- adjusted for inclusive motions `inclusive-motion-selection-exclusive`.
---- Note that when "exclusive" is used and selecting from the end
---- backwards, you cannot include the last character of a line, when
---- starting in Normal mode and 'virtualedit' empty.
+---
+--- Note:
+--- - When "exclusive" is used and selecting from the end backwards, you
+---   cannot include the last character of a line, when starting in Normal
+---   mode and 'virtualedit' empty.
+--- - when "exclusive" is used with a single character visual selection,
+---   Vim will behave as if the 'selection' is inclusive (in other words,
+---   you cannot visually select an empty region).
 ---
 --- @type 'inclusive'|'exclusive'|'old'
 vim.o.selection = "inclusive"
@@ -5809,10 +5859,10 @@ vim.o.sr = vim.o.shiftround
 vim.go.shiftround = vim.o.shiftround
 vim.go.sr = vim.go.shiftround
 
---- Number of spaces to use for each step of (auto)indent.  Used for
---- `'cindent'`, `>>`, `<<`, etc.
---- When zero the 'tabstop' value will be used.  Use the `shiftwidth()`
---- function to get the effective shiftwidth value.
+--- Number of columns that make up one level of (auto)indentation.  Used
+--- by `'cindent'`, `<<`, `>>`, etc.
+--- If set to 0, Vim uses the current 'tabstop' value.  Use `shiftwidth()`
+--- to obtain the effective value in scripts.
 ---
 --- @type integer
 vim.o.shiftwidth = 8
@@ -6121,16 +6171,13 @@ vim.o.si = vim.o.smartindent
 vim.bo.smartindent = vim.o.smartindent
 vim.bo.si = vim.bo.smartindent
 
---- When on, a <Tab> in front of a line inserts blanks according to
---- 'shiftwidth'.  'tabstop' or 'softtabstop' is used in other places.  A
---- <BS> will delete a 'shiftwidth' worth of space at the start of the
---- line.
---- When off, a <Tab> always inserts blanks according to 'tabstop' or
---- 'softtabstop'.  'shiftwidth' is only used for shifting text left or
---- right `shift-left-right`.
---- What gets inserted (a <Tab> or spaces) depends on the 'expandtab'
---- option.  Also see `ins-expandtab`.  When 'expandtab' is not set, the
---- number of spaces is minimized by using <Tab>s.
+--- When enabled, the <Tab> key will indent by 'shiftwidth' if the cursor
+--- is in leading whitespace.  The <BS> key has the opposite effect.
+--- In leading whitespace, this has the same effect as setting
+--- 'softtabstop' to the value of 'shiftwidth'.
+--- NOTE: in most cases, using 'softtabstop' is a better option.  Have a
+--- look at section `30.5` of the user guide for detailed
+--- explanations on how Vim works with tabs and spaces.
 ---
 --- @type boolean
 vim.o.smarttab = true
@@ -6152,18 +6199,24 @@ vim.o.sms = vim.o.smoothscroll
 vim.wo.smoothscroll = vim.o.smoothscroll
 vim.wo.sms = vim.wo.smoothscroll
 
---- Number of spaces that a <Tab> counts for while performing editing
---- operations, like inserting a <Tab> or using <BS>.  It "feels" like
---- <Tab>s are being inserted, while in fact a mix of spaces and <Tab>s is
---- used.  This is useful to keep the 'ts' setting at its standard value
---- of 8, while being able to edit like it is set to 'sts'.  However,
---- commands like "x" still work on the actual characters.
---- When 'sts' is zero, this feature is off.
---- When 'sts' is negative, the value of 'shiftwidth' is used.
---- See also `ins-expandtab`.  When 'expandtab' is not set, the number of
---- spaces is minimized by using <Tab>s.
---- The 'L' flag in 'cpoptions' changes how tabs are used when 'list' is
---- set.
+--- Create soft tab stops, separated by 'softtabstop' number of columns.
+--- In Insert mode, pressing the <Tab> key will move the cursor to the
+--- next soft tab stop, instead of inserting a literal tab.  <BS> behaves
+--- similarly in reverse.  Vim inserts a minimal mix of tab and space
+--- characters to produce the visual effect.
+---
+--- This setting does not affect the display of existing tab characters.
+---
+--- A value of 0 disables this behaviour.  A negative value makes Vim use
+--- 'shiftwidth'.  If you plan to use 'sts' and 'shiftwidth' with
+--- different values, you might consider setting 'smarttab'.
+---
+--- 'softtabstop' is temporarily set to 0 when 'paste' is on and reset
+--- when it is turned off.  It is also reset when 'compatible' is set.
+---
+--- The 'L' flag in 'cpoptions' alters tab behavior when 'list' is
+--- enabled.  See also `ins-expandtab` ans user manual section `30.5` for
+--- in-depth explanations.
 ---
 --- The value of 'softtabstop' will be ignored if `'varsofttabstop'` is set
 --- to anything other than an empty string.
@@ -6919,45 +6972,12 @@ vim.o.tpm = vim.o.tabpagemax
 vim.go.tabpagemax = vim.o.tabpagemax
 vim.go.tpm = vim.go.tabpagemax
 
---- Number of spaces that a <Tab> in the file counts for.  Also see
---- the `:retab` command, and the 'softtabstop' option.
----
---- Note: Setting 'tabstop' to any other value than 8 can make your file
---- appear wrong in many places.
---- The value must be more than 0 and less than 10000.
----
---- There are five main ways to use tabs in Vim:
---- 1. Always keep 'tabstop' at 8, set 'softtabstop' and 'shiftwidth' to 4
----    (or 3 or whatever you prefer) and use 'noexpandtab'.  Then Vim
----    will use a mix of tabs and spaces, but typing <Tab> and <BS> will
----    behave like a tab appears every 4 (or 3) characters.
----    This is the recommended way, the file will look the same with other
----    tools and when listing it in a terminal.
---- 2. Set 'softtabstop' and 'shiftwidth' to whatever you prefer and use
----    'expandtab'.  This way you will always insert spaces.  The
----    formatting will never be messed up when 'tabstop' is changed (leave
----    it at 8 just in case).  The file will be a bit larger.
----    You do need to check if no Tabs exist in the file.  You can get rid
----    of them by first setting 'expandtab' and using `%retab!`, making
----    sure the value of 'tabstop' is set correctly.
---- 3. Set 'tabstop' and 'shiftwidth' to whatever you prefer and use
----    'expandtab'.  This way you will always insert spaces.  The
----    formatting will never be messed up when 'tabstop' is changed.
----    You do need to check if no Tabs exist in the file, just like in the
----    item just above.
---- 4. Set 'tabstop' and 'shiftwidth' to whatever you prefer and use a
----    `modeline` to set these values when editing the file again.  Only
----    works when using Vim to edit the file, other tools assume a tabstop
----    is worth 8 spaces.
---- 5. Always set 'tabstop' and 'shiftwidth' to the same value, and
----    'noexpandtab'.  This should then work (for initial indents only)
----    for any tabstop setting that people use.  It might be nice to have
----    tabs after the first non-blank inserted as spaces if you do this
----    though.  Otherwise aligned comments will be wrong when 'tabstop' is
----    changed.
----
---- The value of 'tabstop' will be ignored if `'vartabstop'` is set to
---- anything other than an empty string.
+--- Defines the column multiple used to display the Horizontal Tab
+--- character (ASCII 9); a Horizontal Tab always advances to the next tab
+--- stop.
+--- The value must be at least 1 and at most 9999.
+--- If `'vartabstop'` is set, this option is ignored.
+--- Leave it at 8 unless you have a strong reason (see usr `30.5`).
 ---
 --- @type integer
 vim.o.tabstop = 8
@@ -7477,11 +7497,9 @@ vim.o.ut = vim.o.updatetime
 vim.go.updatetime = vim.o.updatetime
 vim.go.ut = vim.go.updatetime
 
---- A list of the number of spaces that a <Tab> counts for while editing,
---- such as inserting a <Tab> or using <BS>.  It "feels" like variable-
---- width <Tab>s are being inserted, while in fact a mixture of spaces
---- and <Tab>s is used.  Tab widths are separated with commas, with the
---- final value applying to all subsequent tabs.
+--- Defines variable-width soft tab stops.  The value is a comma-separated
+--- list of widths in columns.  Each width defines the number of columns
+--- before the next soft tab stop.  The last value repeats indefinitely.
 ---
 --- For example, when editing assembly language files where statements
 --- start in the 9th column and comments in the 41st, it may be useful
@@ -7490,11 +7508,12 @@ vim.go.ut = vim.go.updatetime
 --- ```vim
 --- 	set varsofttabstop=8,32,8
 --- ```
---- This will set soft tabstops with 8 and 8 + 32 spaces, and 8 more
---- for every column thereafter.
+--- This sets soft tab stops at column 8, then at column 40 (8 + 32), and
+--- every 8 columns thereafter.
 ---
---- Note that the value of `'softtabstop'` will be ignored while
---- 'varsofttabstop' is set.
+--- Note: this setting overrides 'softtabstop'.
+--- See section `30.5` of the user manual for detailed explanations on how
+--- Vim works with tabs and spaces.
 ---
 --- @type string
 vim.o.varsofttabstop = ""
@@ -7502,18 +7521,22 @@ vim.o.vsts = vim.o.varsofttabstop
 vim.bo.varsofttabstop = vim.o.varsofttabstop
 vim.bo.vsts = vim.bo.varsofttabstop
 
---- A list of the number of spaces that a <Tab> in the file counts for,
---- separated by commas.  Each value corresponds to one tab, with the
---- final value applying to all subsequent tabs. For example:
+--- Defines variable-width tab stops. The value is a comma-separated list
+--- of widths in columns.  Each width defines the number of columns
+--- before the next tab stop; the last value repeats indefinitely.
 ---
---- ```vim
---- 	set vartabstop=4,20,10,8
+--- For example:
 --- ```
---- This will make the first tab 4 spaces wide, the second 20 spaces,
---- the third 10 spaces, and all following tabs 8 spaces.
+--- 	:set vartabstop=4,8
+--- ```
+--- This places the first tab stop 4 columns from the start of the line
+--- and each subsequent tab stop 8 columns apart.
 ---
---- Note that the value of `'tabstop'` will be ignored while 'vartabstop'
---- is set.
+--- Note: this setting overrides 'tabstop'.
+--- On UNIX, it is recommended to keep the default tabstop value of 8.
+--- Consider setting 'varsofttabstop' instead.
+--- See section `30.5` of the user manual for detailed explanations on how
+--- Vim works with tabs and spaces.
 ---
 --- @type string
 vim.o.vartabstop = ""
@@ -7913,6 +7936,9 @@ vim.go.wim = vim.go.wildmode
 --- 		is displayed per line.  Often used tag kinds are:
 --- 			d	#define
 --- 			f	function
+---
+--- This option does not apply to `ins-completion`. See 'completeopt' for
+--- that.
 ---
 --- @type string
 vim.o.wildoptions = "pum,tagfile"
